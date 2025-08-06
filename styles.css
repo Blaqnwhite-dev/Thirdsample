@@ -73,15 +73,17 @@ body {
   backdrop-filter: blur(10px);
 }
 
-/* Header Image */
+/* Header Image - FIXED RESPONSIVE */
 .header-image {
   text-align: center;
   margin-bottom: 30px;
 }
 
-.header-image svg {
-  max-width: 100%;
+.responsive-logo {
+  width: 100%;
   height: auto;
+  max-width: 600px;
+  min-height: 80px;
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
@@ -638,9 +640,9 @@ body {
     font-size: 0.9rem;
   }
 
-  .header-image svg {
-    width: 100%;
-    height: auto;
+  .responsive-logo {
+    max-width: 100%;
+    min-height: 60px;
   }
 
   .mission-statement {
@@ -722,8 +724,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .header-image svg {
-    height: 80px;
+  .responsive-logo {
+    min-height: 50px;
   }
 
   .mission-statement p {

@@ -1,7 +1,184 @@
+// Standalone version - NO Supabase required!
+// All functions work with local simulation
+
 // Global variables
 let selectedAmount = 0
 let selectedFrequency = "once"
-const currentStep = "donation"
+let currentUser = null
+let donations = [] // Local storage for demo
+let users = [] // Local storage for demo
+
+// Simulate database with localStorage
+const localDB = {
+  saveDonation: async (data) => {
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    const donation = {
+      id: Date.now(),
+      ...data,
+      transaction_id: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: 'completed',
+      created_at: new Date().toISOString()
+    }
+    
+    donations.push(donation)
+    localStorage.setItem('donations', JSON.stringify(donations))
+    return { success: true, data: donation }
+  },
+
+  signIn: async (email, password) => {
+    await new Promise(resolve => setTimeout(resolve, 800))
+    
+    const user = users.find(u => u.email === email && u.password === password)
+    if (user) {
+      currentUser = user
+      localStorage.setItem('currentUser', JSON.stringify(user))
+      return { success: true, data: { user } }
+    }
+    return { success: false, error: 'Invalid credentials' }
+  },
+
+  signUp: async (userData) => {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // Check if user already exists
+    if (users.find(u => u.email === userData.email)) {
+      return { success: false, error: 'User already exists' }
+    }
+    
+    const user = {
+      id: Date.now(),
+      ...userData,
+      role: 'user',
+      created_at: new Date().toISOString()
+    }
+    
+    users.push(user)
+    localStorage.setItem('users', JSON.stringify(users))
+    return { success: true, data: user }
+  },
+
+  signOut: async () => {
+    await new Promise(resolve => setTimeout(resolve, 500))
+    currentUser = null
+    localStorage.removeItem('currentUser')
+    return { success: true }
+  },
+
+  getCurrentUser: async () => {
+    const stored = localStorage.getItem('currentUser')
+    if (stored) {
+      currentUser = JSON.parse(stored)
+      return { success: true, user: currentUser }
+    }
+    return { success: false, user: null }
+  },
+
+  isAdmin: async (userId) => {
+    await new Promise(resolve => setTimeout(resolve, 200))
+    const user = users.find(u => u.id === userId)
+    return user?.role === 'admin'
+  },
+
+  getDonations: async (limit = 50) => {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    return { 
+      success: true, 
+      data: donations.slice(-limit).reverse() 
+    }
+  },
+
+  getDonationStats: async () => {
+    await new Promise(resolve => setTimeout(resolve, 400))
+    
+    const totalRaised = donations.reduce((sum, d) => sum + d.amount, 0)
+    const totalDonors = new Set(donations.map(d => d.email)).size
+    const today = new Date().toDateString()
+    const todaysDonations = donations.filter(d => 
+      new Date(d.created_at).toDateString() === today
+    ).length
+    const monthlyDonors = donations.filter(d => d.frequency === 'monthly').length
+
+    return {
+      success: true,
+      stats: {
+        totalRaised,
+        totalDonors,
+        todaysDonations,
+        monthlyDonors
+      }
+    }
+  }
+}
+
+// Initialize from localStorage
+function initializeLocalData() {
+  const storedDonations = localStorage.getItem('donations')
+  const storedUsers = localStorage.getItem('users')
+  const storedUser = localStorage.getItem('currentUser')
+  
+  if (storedDonations) donations = JSON.parse(storedDonations)
+  if (storedUsers) users = JSON.parse(storedUsers)
+  if (storedUser) currentUser = JSON.parse(storedUser)
+  
+  // Add demo admin user if none exists
+  if (users.length === 0) {
+    users.push({
+      id: 1,
+      firstName: 'Admin',
+      lastName: 'User',
+      email: 'admin@demo.com',
+      password: 'admin123',
+      role: 'admin',
+      created_at: new Date().toISOString()
+    })
+    localStorage.setItem('users', JSON.stringify(users))
+  }
+  
+  // Add some demo donations if none exist
+  if (donations.length === 0) {
+    const demoDonations = [
+      {
+        id: 1,
+        amount: 250,
+        frequency: 'once',
+        email: 'john.doe@email.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        address: '123 Main St',
+        city: 'Anytown',
+        state: 'CA',
+        zipCode: '12345',
+        country: 'US',
+        cellNumber: '555-0123',
+        transaction_id: 'TXN_DEMO_001',
+        status: 'completed',
+        created_at: new Date(Date.now() - 86400000).toISOString() // Yesterday
+      },
+      {
+        id: 2,
+        amount: 100,
+        frequency: 'monthly',
+        email: 'sarah.smith@email.com',
+        firstName: 'Sarah',
+        lastName: 'Smith',
+        address: '456 Oak Ave',
+        city: 'Springfield',
+        state: 'NY',
+        zipCode: '67890',
+        country: 'US',
+        cellNumber: '555-0456',
+        transaction_id: 'TXN_DEMO_002',
+        status: 'completed',
+        created_at: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+      }
+    ]
+    
+    donations = demoDonations
+    localStorage.setItem('donations', JSON.stringify(donations))
+  }
+}
 
 // DOM elements
 const amountButtons = document.querySelectorAll(".amount-btn")
@@ -22,28 +199,16 @@ const switchToSignIn = document.getElementById("switchToSignIn")
 const closeModal = document.querySelector(".close")
 const loadingOverlay = document.getElementById("loadingOverlay")
 
-// Initialize event listeners
+// Initialize everything when page loads
 document.addEventListener("DOMContentLoaded", () => {
-  // Wait for db to be available from supabase-config.js
-  setTimeout(() => {
-    if (!window.db) {
-      console.error('Database not available. Make sure supabase-config.js is loaded.');
-      showNotification('Database connection error. Please refresh the page.', 'error');
-      return;
-    }
-    
-    initializeAmountButtons()
-    initializeFrequencyButtons()
-    initializePaymentFlow()
-    initializeAuthentication()
-    initializeAnimations()
-    initializeFormValidation()
-    
-    console.log('✅ Main script initialized successfully');
-  }, 100);
-})
+  initializeLocalData()
+  initializeAmountButtons()
+  initializeFrequencyButtons()
+  initializePaymentFlow()
+  initializeAuthentication()
+  initializeAnimations()
+  checkCurrentUser()
 
-function initializeFormValidation() {
   // Add real-time validation for country dropdown
   const countrySelect = document.getElementById("country")
   if (countrySelect) {
@@ -82,26 +247,13 @@ function initializeFormValidation() {
       })
     }
   })
+})
 
-  // Add input formatting
-  const cardNumberInput = document.getElementById("cardNumber")
-  if (cardNumberInput) {
-    cardNumberInput.addEventListener("input", function () {
-      const value = this.value.replace(/\s/g, "").replace(/[^0-9]/gi, "")
-      const formattedValue = value.match(/.{1,4}/g)?.join(" ") || value
-      this.value = formattedValue
-    })
-  }
-
-  const expiryInput = document.getElementById("expiryDate")
-  if (expiryInput) {
-    expiryInput.addEventListener("input", function () {
-      let value = this.value.replace(/\D/g, "")
-      if (value.length >= 2) {
-        value = value.substring(0, 2) + "/" + value.substring(2, 4)
-      }
-      this.value = value
-    })
+// Check current user and update UI
+async function checkCurrentUser() {
+  const result = await localDB.getCurrentUser()
+  if (result.user) {
+    updateAuthUI(true, result.user)
   }
 }
 
@@ -128,7 +280,7 @@ function initializeAmountButtons() {
       this.classList.add("selected")
 
       // Set selected amount
-      selectedAmount = Number.parseInt(this.dataset.amount)
+      selectedAmount = parseInt(this.dataset.amount)
 
       // Clear custom amount input
       customAmountInput.value = ""
@@ -147,7 +299,7 @@ function initializeAmountButtons() {
     amountButtons.forEach((btn) => btn.classList.remove("selected"))
 
     // Set selected amount
-    selectedAmount = Number.parseInt(this.value) || 0
+    selectedAmount = parseInt(this.value) || 0
   })
 }
 
@@ -175,40 +327,32 @@ function initializeFrequencyButtons() {
 
 // Payment flow functionality with step validation
 function initializePaymentFlow() {
-  if (cardPaymentBtn) {
-    cardPaymentBtn.addEventListener("click", () => {
-      console.log('Card payment button clicked, selected amount:', selectedAmount)
-      
-      if (selectedAmount === 0) {
-        showNotification("Please select an amount first.", "error")
-        return
-      }
+  cardPaymentBtn.addEventListener("click", () => {
+    if (selectedAmount === 0) {
+      showNotification("Please select an amount first.", "error")
+      return
+    }
 
-      // Hide donation form and show payment process
-      donationForm.classList.add("hidden")
-      paymentProcess.classList.remove("hidden")
+    // Hide donation form and show payment process
+    donationForm.classList.add("hidden")
+    paymentProcess.classList.remove("hidden")
 
-      // Update selected amount display
-      const selectedAmountDisplay = document.getElementById("selectedAmountDisplay")
-      const selectedFrequencyDisplay = document.getElementById("selectedFrequency")
-      const finalAmountDisplay = document.getElementById("finalAmount")
-      
-      if (selectedAmountDisplay) selectedAmountDisplay.textContent = selectedAmount
-      if (selectedFrequencyDisplay) selectedFrequencyDisplay.textContent = selectedFrequency === "once" ? "One-time" : "Monthly"
-      if (finalAmountDisplay) finalAmountDisplay.textContent = selectedAmount
+    // Update selected amount display
+    document.getElementById("selectedAmountDisplay").textContent = selectedAmount
+    document.getElementById("selectedFrequency").textContent = selectedFrequency === "once" ? "One-time" : "Monthly"
+    document.getElementById("finalAmount").textContent = selectedAmount
 
-      // Reset navigation state
-      resetNavigationState()
+    // Reset navigation state
+    resetNavigationState()
 
-      // Add slide animation
-      paymentProcess.style.opacity = "0"
-      paymentProcess.style.transform = "translateX(50px)"
-      setTimeout(() => {
-        paymentProcess.style.opacity = "1"
-        paymentProcess.style.transform = "translateX(0)"
-      }, 100)
-    })
-  }
+    // Add slide animation
+    paymentProcess.style.opacity = "0"
+    paymentProcess.style.transform = "translateX(50px)"
+    setTimeout(() => {
+      paymentProcess.style.opacity = "1"
+      paymentProcess.style.transform = "translateX(0)"
+    }, 100)
+  })
 
   // Navigation tabs with validation
   navTabs.forEach((tab) => {
@@ -228,33 +372,6 @@ function initializePaymentFlow() {
 
   // Initialize navigation state
   resetNavigationState()
-  
-  // Add button handlers for continue buttons
-  setTimeout(() => {
-    const amountContinueBtn = document.querySelector("#amountTab .continue-btn")
-    if (amountContinueBtn) {
-      amountContinueBtn.addEventListener('click', (e) => {
-        e.preventDefault()
-        completeAmountStep()
-      })
-    }
-
-    const detailsContinueBtn = document.querySelector("#detailsTab .continue-btn")
-    if (detailsContinueBtn) {
-      detailsContinueBtn.addEventListener('click', (e) => {
-        e.preventDefault()
-        completeDetailsStep()
-      })
-    }
-
-    const donateBtn = document.querySelector(".donate-btn")
-    if (donateBtn) {
-      donateBtn.addEventListener('click', (e) => {
-        e.preventDefault()
-        processDonation()
-      })
-    }
-  }, 100)
 }
 
 // Reset navigation state
@@ -472,10 +589,8 @@ function showNotification(message, type = "info") {
   }, 4000)
 }
 
-// Process donation with Supabase integration
+// Process donation with local storage
 async function processDonation() {
-  console.log('Processing donation...')
-  
   // Validate form
   const requiredFields = [
     "email",
@@ -495,8 +610,8 @@ async function processDonation() {
 
   requiredFields.forEach((fieldId) => {
     const field = document.getElementById(fieldId)
-    if (!field || !field.value.trim()) {
-      if (field) field.style.borderColor = "#e74c3c"
+    if (!field.value.trim()) {
+      field.style.borderColor = "#e74c3c"
       isValid = false
     } else {
       field.style.borderColor = "#ddd"
@@ -527,8 +642,8 @@ async function processDonation() {
       cellNumber: document.getElementById("cellNumber").value,
     }
 
-    // Save donation using the global db object
-    const result = await window.db.saveDonation(donationData)
+    // Save donation to local storage
+    const result = await localDB.saveDonation(donationData)
 
     hideLoading()
 
@@ -579,11 +694,8 @@ function resetForm() {
   resetNavigationState()
 }
 
-// Authentication functionality with Supabase
+// Authentication functionality with local storage
 function initializeAuthentication() {
-  // Initialize auth links first
-  initializeAuthenticationLinks()
-  
   // Form submissions
   const loginForm = document.getElementById("loginForm")
   const registerForm = document.getElementById("registerForm")
@@ -603,24 +715,22 @@ function initializeAuthentication() {
       showLoading("Signing in...")
 
       try {
-        const result = await window.db.signIn(email, password)
+        const result = await localDB.signIn(email, password)
 
         hideLoading()
 
         if (result.success) {
           showNotification("Login successful!", "success")
           authModal.style.display = "none"
+          updateAuthUI(true, result.data.user)
 
           // Check if user is admin and redirect
-          const isAdmin = await window.db.isAdmin(result.data.user.id)
+          const isAdmin = await localDB.isAdmin(result.data.user.id)
           if (isAdmin) {
             setTimeout(() => {
               window.location.href = "admin.html"
             }, 1000)
           }
-          
-          // Update UI
-          updateAuthUI(true, result.data.user)
         } else {
           showNotification(result.error || "Login failed. Please try again.", "error")
         }
@@ -659,7 +769,7 @@ function initializeAuthentication() {
       showLoading("Creating account...")
 
       try {
-        const result = await window.db.signUp({
+        const result = await localDB.signUp({
           firstName,
           lastName,
           email,
@@ -716,6 +826,9 @@ function initializeAuthentication() {
       authModal.style.display = "none"
     }
   })
+
+  // Initialize auth links
+  initializeAuthenticationLinks()
 }
 
 // Initialize authentication links
@@ -726,7 +839,6 @@ function initializeAuthenticationLinks() {
   if (signInLink) {
     signInLink.addEventListener("click", (e) => {
       e.preventDefault()
-      console.log('Sign in link clicked')
       document.getElementById("authModal").style.display = "block"
       document.getElementById("signInForm").classList.remove("hidden")
       document.getElementById("signUpForm").classList.add("hidden")
@@ -736,7 +848,6 @@ function initializeAuthenticationLinks() {
   if (signUpLink) {
     signUpLink.addEventListener("click", (e) => {
       e.preventDefault()
-      console.log('Sign up link clicked')
       document.getElementById("authModal").style.display = "block"
       document.getElementById("signUpForm").classList.remove("hidden")
       document.getElementById("signInForm").classList.add("hidden")
@@ -749,9 +860,8 @@ function updateAuthUI(isSignedIn, user) {
   const authLinks = document.querySelector(".auth-links")
 
   if (isSignedIn && user) {
-    const firstName = user.user_metadata?.first_name || user.first_name || "User"
     authLinks.innerHTML = `
-      <span>Welcome, ${firstName}</span>
+      <span>Welcome, ${user.firstName || "User"}</span>
       <span>|</span>
       <a href="#" id="signOutLink">Sign Out</a>
       <span>|</span>
@@ -761,7 +871,7 @@ function updateAuthUI(isSignedIn, user) {
     // Add sign out functionality
     document.getElementById("signOutLink")?.addEventListener("click", async (e) => {
       e.preventDefault()
-      const result = await window.db.signOut()
+      const result = await localDB.signOut()
       if (result.success) {
         location.reload()
       }
@@ -774,9 +884,7 @@ function updateAuthUI(isSignedIn, user) {
     `
 
     // Re-initialize auth modal listeners
-    setTimeout(() => {
-      initializeAuthenticationLinks()
-    }, 100)
+    initializeAuthenticationLinks()
   }
 }
 
@@ -847,18 +955,6 @@ document.addEventListener("DOMContentLoaded", () => {
       this.value = value
     })
   }
-
-  // Replace the continue button click in amount tab
-  const amountContinueBtn = document.querySelector("#amountTab .continue-btn")
-  if (amountContinueBtn) {
-    amountContinueBtn.onclick = () => completeAmountStep()
-  }
-
-  // Replace the continue button click in details tab
-  const detailsContinueBtn = document.querySelector("#detailsTab .continue-btn")
-  if (detailsContinueBtn) {
-    detailsContinueBtn.onclick = () => completeDetailsStep()
-  }
 })
 
 // Add CSS animations
@@ -922,3 +1018,9 @@ style.textContent = `
   }
 `
 document.head.appendChild(style)
+
+// Demo credentials info
+console.log("🎯 DEMO CREDENTIALS:")
+console.log("Admin Login: admin@demo.com / admin123")
+console.log("💳 Test Card: 4242 4242 4242 4242")
+console.log("📅 Expiry: 12/25, CVV: 123")

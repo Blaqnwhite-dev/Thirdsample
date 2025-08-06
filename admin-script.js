@@ -1,13 +1,34 @@
-// Admin Dashboard JavaScript with Supabase Integration
-const db = {} // Declare the db variable here
+// Admin Dashboard JavaScript with Supabase Integration - FIXED VERSION
+let db = null; // Will be initialized from supabase-config.js
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Wait for db to be available from supabase-config.js
+  if (typeof window.db !== 'undefined') {
+    db = window.db;
+  } else {
+    // Fallback: wait a bit for supabase-config.js to load
+    setTimeout(() => {
+      db = window.db;
+      if (!db) {
+        console.error('Database not available. Make sure supabase-config.js is loaded.');
+        showNotification('Database connection error. Please refresh the page.', 'error');
+        return;
+      }
+      initializeAdmin();
+    }, 100);
+    return;
+  }
+  
+  initializeAdmin();
+});
+
+function initializeAdmin() {
   initializeSidebar()
   initializeNavigation()
   initializeMobileMenu()
   checkAdminAccess()
   loadDashboardData()
-})
+}
 
 // Check if user has admin access
 async function checkAdminAccess() {
@@ -16,6 +37,7 @@ async function checkAdminAccess() {
 
     if (!user) {
       // Redirect to login if not authenticated
+      alert('Please sign in to access the admin dashboard.')
       window.location.href = "index.html"
       return
     }
@@ -31,10 +53,14 @@ async function checkAdminAccess() {
     // Update admin name in header
     const adminName = document.getElementById("adminName")
     if (adminName) {
-      adminName.textContent = user.user_metadata?.first_name || "Administrator"
+      const firstName = user.user_metadata?.first_name || user.first_name || "Administrator"
+      adminName.textContent = firstName
     }
+    
+    console.log('✅ Admin access granted')
   } catch (error) {
     console.error("Admin access check failed:", error)
+    alert('Error checking admin access. Redirecting to main page.')
     window.location.href = "index.html"
   }
 }
@@ -151,6 +177,8 @@ function initializeMobileMenu() {
 
 // Load section-specific data
 async function loadSectionData(section) {
+  console.log(`Loading data for section: ${section}`)
+  
   switch (section) {
     case "donations":
       await loadDonationsData()
@@ -178,14 +206,19 @@ async function loadDashboardData() {
       const stats = statsResult.stats
 
       // Update stat cards
-      document.getElementById("totalRaised").textContent = `$${stats.totalRaised.toLocaleString()}`
-      document.getElementById("totalDonors").textContent = stats.totalDonors.toLocaleString()
-      document.getElementById("todaysDonations").textContent = stats.todaysDonations.toLocaleString()
+      const totalRaisedEl = document.getElementById("totalRaised")
+      const totalDonorsEl = document.getElementById("totalDonors")
+      const todaysDonationsEl = document.getElementById("todaysDonations")
+      const goalProgressEl = document.getElementById("goalProgress")
+
+      if (totalRaisedEl) totalRaisedEl.textContent = `$${stats.totalRaised.toLocaleString()}`
+      if (totalDonorsEl) totalDonorsEl.textContent = stats.totalDonors.toLocaleString()
+      if (todaysDonationsEl) todaysDonationsEl.textContent = stats.todaysDonations.toLocaleString()
 
       // Calculate goal progress
       const goalAmount = 1000000 // $1M goal
       const progressPercentage = Math.min((stats.totalRaised / goalAmount) * 100, 100)
-      document.getElementById("goalProgress").textContent = `${progressPercentage.toFixed(1)}%`
+      if (goalProgressEl) goalProgressEl.textContent = `${progressPercentage.toFixed(1)}%`
 
       // Update campaign progress
       const campaignRaised = document.getElementById("campaignRaised")
@@ -217,6 +250,11 @@ async function loadRecentActivity() {
       const activityList = document.getElementById("activityList")
       if (activityList) {
         activityList.innerHTML = ""
+
+        if (donationsResult.data.length === 0) {
+          activityList.innerHTML = '<div class="activity-item"><div class="activity-details"><p>No recent donations</p></div></div>'
+          return
+        }
 
         donationsResult.data.forEach((donation, index) => {
           const timeAgo = getTimeAgo(new Date(donation.created_at))
@@ -263,6 +301,11 @@ async function loadDonationsData() {
 
     if (donationsResult.success) {
       tableBody.innerHTML = ""
+
+      if (donationsResult.data.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="loading-row">No donations found</td></tr>'
+        return
+      }
 
       donationsResult.data.forEach((donation) => {
         const row = document.createElement("tr")
@@ -328,6 +371,11 @@ async function loadDonorsData() {
 
       donorsGrid.innerHTML = ""
 
+      if (donorMap.size === 0) {
+        donorsGrid.innerHTML = '<div class="loading-message">No donors found</div>'
+        return
+      }
+
       Array.from(donorMap.values()).forEach((donor) => {
         const donorCard = document.createElement("div")
         donorCard.className = "donor-card"
@@ -376,7 +424,7 @@ async function loadDonorsData() {
 // Load campaigns data
 async function loadCampaignsData() {
   // Campaign data is mostly static for now
-  // In a real app, this would load from the campaigns table
+  console.log('Campaigns data loaded (static)')
 }
 
 // Animate counter numbers
@@ -385,7 +433,7 @@ function animateCounters() {
 
   counters.forEach((counter) => {
     const target = counter.textContent
-    const numericValue = Number.parseInt(target.replace(/[^0-9]/g, ""))
+    const numericValue = parseInt(target.replace(/[^0-9]/g, ""))
 
     if (numericValue) {
       let current = 0
@@ -621,13 +669,18 @@ function getTimeAgo(date) {
 
 function showLoading(message = "Loading...") {
   const overlay = document.getElementById("loadingOverlay")
-  const text = overlay.querySelector("p")
-  text.textContent = message
-  overlay.classList.remove("hidden")
+  if (overlay) {
+    const text = overlay.querySelector("p")
+    if (text) text.textContent = message
+    overlay.classList.remove("hidden")
+  }
 }
 
 function hideLoading() {
-  document.getElementById("loadingOverlay").classList.add("hidden")
+  const overlay = document.getElementById("loadingOverlay")
+  if (overlay) {
+    overlay.classList.add("hidden")
+  }
 }
 
 function showNotification(message, type = "info") {
